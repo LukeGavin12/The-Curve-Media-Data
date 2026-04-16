@@ -8,7 +8,7 @@ from typing import Any
 
 from supabase import create_client, Client
 
-from pipeline.config import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+from config import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 logger = logging.getLogger(__name__)
 

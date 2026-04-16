@@ -9,9 +9,9 @@ from datetime import datetime, timezone, timedelta
 
 import httpx
 
-from pipeline.config import NEWSAPI_KEY, MAX_ARTICLES_PER_SOURCE
-from pipeline.ingestion.fetcher import _guid
-from pipeline.ingestion.storage import get_sources, log_source_run
+from config import NEWSAPI_KEY, MAX_ARTICLES_PER_SOURCE
+from ingestion.fetcher import _guid
+from ingestion.storage import get_sources, log_source_run
 
 logger = logging.getLogger(__name__)
 

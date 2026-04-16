@@ -23,8 +23,8 @@ from typing import Any
 import numpy as np
 import voyageai
 
-from pipeline.config import VOYAGE_API_KEY
-from pipeline.ingestion.storage import get_client, get_pipeline_settings, TABLE
+from config import VOYAGE_API_KEY
+from ingestion.storage import get_client, get_pipeline_settings, TABLE
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from datetime import datetime, timedelta, timezone
 import feedparser
 import httpx
 
-from pipeline.ingestion.storage import get_sources, log_source_run
-from pipeline.config import MAX_ARTICLES_PER_SOURCE
+from ingestion.storage import get_sources, log_source_run
+from config import MAX_ARTICLES_PER_SOURCE
 
 logger = logging.getLogger(__name__)
 
@@ -115,8 +115,8 @@ def fetch_rss_source(source: dict) -> list[dict]:
 
 def fetch_all_sources() -> list[dict]:
     """Fetch from all enabled sources — RSS, NewsAPI, and Finnhub."""
-    from pipeline.ingestion.newsapi import fetch_newsapi
-    from pipeline.ingestion.finnhub import fetch_finnhub
+    from ingestion.newsapi import fetch_newsapi
+    from ingestion.finnhub import fetch_finnhub
 
     all_articles = []
 

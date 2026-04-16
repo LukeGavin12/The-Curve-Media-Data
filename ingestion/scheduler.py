@@ -10,12 +10,12 @@ import logging
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from pipeline.ingestion.fetcher import fetch_all_sources
-from pipeline.ingestion.storage import upsert_articles
-from pipeline.filtering.filter import run_filtering
-from pipeline.clustering.cluster import run_clustering
-from pipeline.hybrid_clustering.hybrid_cluster import run_hybrid_clustering
-from pipeline.scoring.score import run_scoring
+from ingestion.fetcher import fetch_all_sources
+from ingestion.storage import upsert_articles
+from filtering.filter import run_filtering
+from clustering.cluster import run_clustering
+from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
+from scoring.score import run_scoring
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ from typing import Any
 from rapidfuzz.distance import Levenshtein
 from langdetect import detect, LangDetectException
 
-from pipeline.ingestion.storage import get_client, TABLE
+from ingestion.storage import get_client, TABLE
 
 logger = logging.getLogger(__name__)
 

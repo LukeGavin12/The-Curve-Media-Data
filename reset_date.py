@@ -23,7 +23,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-from pipeline.ingestion.storage import get_client, TABLE
+from ingestion.storage import get_client, TABLE
 
 CLUSTERS_TABLE = "story_clusters"
 

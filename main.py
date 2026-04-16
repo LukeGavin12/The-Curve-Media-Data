@@ -22,15 +22,15 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 
-from pipeline.ingestion.scheduler import (
+from ingestion.scheduler import (
     run_daily_pipeline,
     run_ingestion,
     start_scheduler,
 )
-from pipeline.filtering.filter import run_filtering
-from pipeline.clustering.cluster import run_clustering
-from pipeline.hybrid_clustering.hybrid_cluster import run_hybrid_clustering
-from pipeline.scoring.score import run_scoring
+from filtering.filter import run_filtering
+from clustering.cluster import run_clustering
+from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
+from scoring.score import run_scoring
 
 DATE_STAGES = {"filter", "cluster", "hybrid", "score"}
 
