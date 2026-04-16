@@ -97,12 +97,7 @@ def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
     """Send articles to Claude, get back list of {name, article_ids}."""
     lines = []
     for a in articles:
-        lines.append(f'id: {a["id"]}')
-        lines.append(f'title: {a["title"]}')
-        summary = (a.get("summary") or "").strip()
-        if summary:
-            lines.append(f'summary: {summary}')
-        lines.append("")
+        lines.append(f'id: {a["id"]} | {a["title"]}')
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     msg = client.messages.create(
