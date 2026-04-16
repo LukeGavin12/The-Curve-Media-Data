@@ -36,7 +36,8 @@ Rules:
 Return a JSON array of clusters only (do not include singles). For each cluster:
 - name: short punchy headline for the group (3–7 words, no filler)
 - article_ids: array of article id values
-- tags: array of 0–3 relevant tags from the provided list (empty array if none fit)
+- tags: array of 0–3 relevant topic tags from the provided list (empty array if none fit)
+- geo_tags: array of relevant geographic tags from the provided list (empty array if none fit)
 
 Any articles not in a cluster will be kept as singles automatically.
 Return a JSON array only — empty array if nothing should be grouped."""
@@ -84,14 +85,15 @@ def _fetch_assessing_articles(run_date: str) -> list[dict]:
     return resp.data or []
 
 
-def _build_system_prompt(base_prompt: str, week_names: list[str], available_tags: list[str]) -> str:
+def _build_system_prompt(base_prompt: str, week_names: list[str], available_tags: list[str], available_geo_tags: list[str]) -> str:
     prompt = base_prompt
     if week_names:
         names_block = "\n".join(f"  - {n}" for n in week_names)
         prompt += f"\n\nStory names already used this week — if a cluster is clearly the same ongoing story, reuse the exact name:\n{names_block}"
     if available_tags:
-        tags_block = ", ".join(available_tags)
-        prompt += f"\n\nAvailable tags to assign to each cluster: {tags_block}"
+        prompt += f"\n\nAvailable topic tags: {', '.join(available_tags)}"
+    if available_geo_tags:
+        prompt += f"\nAvailable geographic tags: {', '.join(available_geo_tags)}"
     return prompt
 
 
@@ -120,10 +122,11 @@ def run_clustering(run_date: str | None = None) -> None:
     settings = get_pipeline_settings()
     base_prompt = (settings.get("custom_cluster_prompt") or "").strip() or DEFAULT_CLUSTER_PROMPT
     available_tags = settings.get("available_tags") or []
+    available_geo_tags = settings.get("available_geo_tags") or []
 
     week_names = _fetch_week_names(target_date)
     logger.info("Found %d existing story names from earlier this week", len(week_names))
-    system_prompt = _build_system_prompt(base_prompt, week_names, available_tags)
+    system_prompt = _build_system_prompt(base_prompt, week_names, available_tags, available_geo_tags)
 
     articles = _fetch_assessing_articles(target_date)
     if not articles:
@@ -154,6 +157,7 @@ def run_clustering(run_date: str | None = None) -> None:
         anchor = min(cluster_articles, key=lambda a: a.get("published_at") or "9999-12-31")
 
         tags = [t for t in (group.get("tags") or []) if t in available_tags]
+        geo_tags = [t for t in (group.get("geo_tags") or []) if t in available_geo_tags]
 
         supabase.table(CLUSTERS_TABLE).insert({
             "cluster_id":        cluster_id,
@@ -163,6 +167,7 @@ def run_clustering(run_date: str | None = None) -> None:
             "article_count":     len(article_ids),
             "cluster_status":    "pending",
             "tags":              tags,
+            "geo_tags":          geo_tags,
         }).execute()
 
         supabase.table(TABLE).update({"cluster_id": cluster_id}).in_("id", article_ids).execute()
