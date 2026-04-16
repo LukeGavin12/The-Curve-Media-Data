@@ -6,7 +6,6 @@ Entry point.
     python -m pipeline.main --stage ingest    # ingestion only
     python -m pipeline.main --stage filter    # filter yesterday's articles
     python -m pipeline.main --stage cluster   # cluster yesterday's articles
-    python -m pipeline.main --stage hybrid    # hybrid Claude pass for yesterday
     python -m pipeline.main --stage score     # score yesterday's clusters
     python -m pipeline.main --stage filter --date 2026-04-04   # override date
 """
@@ -29,17 +28,15 @@ from ingestion.scheduler import (
 )
 from filtering.filter import run_filtering
 from clustering.cluster import run_clustering
-from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
 from scoring.score import run_scoring
 
-DATE_STAGES = {"filter", "cluster", "hybrid", "score"}
+DATE_STAGES = {"filter", "cluster", "score"}
 
 STAGES = {
-    "ingest":   run_ingestion,
-    "filter":   run_filtering,
-    "cluster":  run_clustering,
-    "hybrid":   run_hybrid_clustering,
-    "score":    run_scoring,
+    "ingest":  run_ingestion,
+    "filter":  run_filtering,
+    "cluster": run_clustering,
+    "score":   run_scoring,
 }
 
 

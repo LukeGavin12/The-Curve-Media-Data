@@ -14,7 +14,6 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from ingestion.scheduler import run_ingestion, start_scheduler
 from filtering.filter import run_filtering
 from clustering.cluster import run_clustering
-from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
 from scoring.score import run_scoring
 
 API_KEY = os.environ.get("PIPELINE_API_KEY", "")
@@ -58,13 +57,6 @@ def run_filter(background_tasks: BackgroundTasks, date: str | None = None, x_api
 def run_cluster(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
     _check_key(x_api_key)
     background_tasks.add_task(run_clustering, run_date=date)
-    return {"status": "started"}
-
-
-@app.post("/run/hybrid")
-def run_hybrid(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
-    _check_key(x_api_key)
-    background_tasks.add_task(run_hybrid_clustering, run_date=date)
     return {"status": "started"}
 
 
