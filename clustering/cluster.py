@@ -41,6 +41,35 @@ Any articles not in a cluster will be kept as singles automatically.
 Return a JSON array only — empty array if nothing should be grouped."""
 
 
+def _get_monday(d: str) -> str:
+    dt = date.fromisoformat(d)
+    return (dt - timedelta(days=dt.weekday())).isoformat()
+
+
+def _fetch_week_names(target_date: str) -> list[str]:
+    """Return unique cluster names used earlier this week (Mon up to target_date)."""
+    monday = _get_monday(target_date)
+    if monday >= target_date:
+        return []
+    supabase = get_client()
+    resp = (
+        supabase.table(CLUSTERS_TABLE)
+        .select("name")
+        .gte("date", monday)
+        .lt("date", target_date)
+        .not_.is_("name", "null")
+        .execute()
+    )
+    seen = set()
+    names = []
+    for r in (resp.data or []):
+        name = (r.get("name") or "").strip()
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
+
+
 def _fetch_assessing_articles(run_date: str) -> list[dict]:
     client = get_client()
     resp = (
@@ -52,6 +81,16 @@ def _fetch_assessing_articles(run_date: str) -> list[dict]:
         .execute()
     )
     return resp.data or []
+
+
+def _build_system_prompt(base_prompt: str, week_names: list[str]) -> str:
+    if not week_names:
+        return base_prompt
+    names_block = "\n".join(f"  - {n}" for n in week_names)
+    return (
+        base_prompt
+        + f"\n\nStory names already used this week — if a cluster is clearly the same ongoing story, reuse the exact name:\n{names_block}"
+    )
 
 
 def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
@@ -82,7 +121,11 @@ def run_clustering(run_date: str | None = None) -> None:
     logger.info("Claude clustering started for %s", target_date)
 
     settings = get_pipeline_settings()
-    system_prompt = (settings.get("custom_cluster_prompt") or "").strip() or DEFAULT_CLUSTER_PROMPT
+    base_prompt = (settings.get("custom_cluster_prompt") or "").strip() or DEFAULT_CLUSTER_PROMPT
+
+    week_names = _fetch_week_names(target_date)
+    logger.info("Found %d existing story names from earlier this week", len(week_names))
+    system_prompt = _build_system_prompt(base_prompt, week_names)
 
     articles = _fetch_assessing_articles(target_date)
     if not articles:
