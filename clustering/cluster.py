@@ -9,7 +9,6 @@ Replaces the previous Voyage AI vector clustering + hybrid Claude pass.
 
 import json
 import logging
-import re
 import uuid
 from datetime import date, timedelta
 
@@ -109,24 +108,16 @@ def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
         model=MODEL,
         max_tokens=4096,
         system=system_prompt,
-        messages=[{"role": "user", "content": "\n".join(lines)}],
+        messages=[
+            {"role": "user", "content": "\n".join(lines)},
+            {"role": "assistant", "content": "["},
+        ],
     )
-    raw = msg.content[0].text.strip()
-    raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    if not raw:
-        logger.warning("Claude returned empty response for clustering — treating as no clusters")
-        return []
+    raw = "[" + msg.content[0].text.strip().removesuffix("```").strip()
     try:
         return json.loads(raw)
-    except json.JSONDecodeError:
-        # Claude may have prepended prose — find the first [...] array in the response
-        m = re.search(r"\[.*\]", raw, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group())
-            except json.JSONDecodeError:
-                pass
-        logger.error("Claude returned non-JSON for clustering (%.200s…)", raw)
+    except json.JSONDecodeError as exc:
+        logger.error("Claude returned non-JSON for clustering (%.200s…): %s", raw, exc)
         return []
 
 
