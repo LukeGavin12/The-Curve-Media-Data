@@ -112,6 +112,9 @@ def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
     )
     raw = msg.content[0].text.strip()
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    if not raw:
+        logger.warning("Claude returned empty response for clustering — treating as no clusters")
+        return []
     return json.loads(raw)
 
 
