@@ -115,7 +115,11 @@ def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
     if not raw:
         logger.warning("Claude returned empty response for clustering — treating as no clusters")
         return []
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.error("Claude returned non-JSON for clustering (%.200s…): %s", raw, exc)
+        return []
 
 
 def run_clustering(run_date: str | None = None) -> None:

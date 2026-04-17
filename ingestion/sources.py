@@ -5,14 +5,9 @@ Each source has a name, type (rss or api), and URL.
 
 RSS_SOURCES = [
     {
-        "name": "Reuters Business",
-        "url": "https://feeds.reuters.com/reuters/businessNews",
+        "name": "AP Business",
+        "url": "https://feeds.apnews.com/rss/business",
         "category": "business",
-    },
-    {
-        "name": "Reuters Finance",
-        "url": "https://feeds.reuters.com/reuters/financialsNews",
-        "category": "finance",
     },
     {
         "name": "CNBC Finance",
@@ -77,8 +72,8 @@ RSS_SOURCES = [
     },
     # IPO-focused
     {
-        "name": "Renaissance Capital IPO News",
-        "url": "https://www.renaissancecapital.com/feeds/iponews.xml",
+        "name": "IPO Monitor",
+        "url": "https://www.iposcoop.com/feed/",
         "category": "ipo",
     },
     {
@@ -104,13 +99,8 @@ RSS_SOURCES = [
     },
     # Newsletters
     {
-        "name": "Morning Brew",
-        "url": "https://www.morningbrew.com/daily/feed.rss",
+        "name": "The Hustle",
+        "url": "https://thehustle.co/feed/",
         "category": "business",
-    },
-    {
-        "name": "Techpresso",
-        "url": "https://techpresso.co/feed",
-        "category": "startups",
     },
 ]
