@@ -108,12 +108,15 @@ def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
         model=MODEL,
         max_tokens=4096,
         system=system_prompt,
-        messages=[
-            {"role": "user", "content": "\n".join(lines)},
-            {"role": "assistant", "content": "["},
-        ],
+        messages=[{"role": "user", "content": "\n".join(lines)}],
     )
-    raw = "[" + msg.content[0].text.strip().removesuffix("```").strip()
+    raw = msg.content[0].text.strip()
+    # Strip any preamble prose before the JSON array
+    start = raw.find("[")
+    if start == -1:
+        logger.warning("Claude returned no JSON array for clustering — treating as no clusters")
+        return []
+    raw = raw[start:].removesuffix("```").strip()
     try:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
