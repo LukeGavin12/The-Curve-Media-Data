@@ -9,6 +9,7 @@ Replaces the previous Voyage AI vector clustering + hybrid Claude pass.
 
 import json
 import logging
+import re
 import uuid
 from datetime import date, timedelta
 
@@ -72,12 +73,12 @@ def _fetch_week_names(target_date: str) -> list[str]:
     return names
 
 
-def _fetch_assessing_articles(run_date: str) -> list[dict]:
+def _fetch_included_articles(run_date: str) -> list[dict]:
     client = get_client()
     resp = (
         client.table(TABLE)
         .select("id, guid, title, summary, published_at")
-        .eq("status", "assessing")
+        .eq("status", "included")
         .gte("fetched_at", f"{run_date}T00:00:00.000Z")
         .lte("fetched_at", f"{run_date}T23:59:59.999Z")
         .execute()
@@ -117,8 +118,15 @@ def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
         return []
     try:
         return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.error("Claude returned non-JSON for clustering (%.200s…): %s", raw, exc)
+    except json.JSONDecodeError:
+        # Claude may have prepended prose — find the first [...] array in the response
+        m = re.search(r"\[.*\]", raw, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group())
+            except json.JSONDecodeError:
+                pass
+        logger.error("Claude returned non-JSON for clustering (%.200s…)", raw)
         return []
 
 
@@ -135,9 +143,9 @@ def run_clustering(run_date: str | None = None) -> None:
     logger.info("Found %d existing story names from earlier this week", len(week_names))
     system_prompt = _build_system_prompt(base_prompt, week_names, available_tags, available_geo_tags)
 
-    articles = _fetch_assessing_articles(target_date)
+    articles = _fetch_included_articles(target_date)
     if not articles:
-        logger.info("Clustering: no assessing articles to process")
+        logger.info("Clustering: no included articles to process")
         return
 
     logger.info("Clustering %d articles with Claude", len(articles))

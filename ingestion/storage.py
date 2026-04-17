@@ -46,7 +46,7 @@ def upsert_articles(articles: list[dict[str, Any]]) -> int:
     return inserted
 
 
-VALID_STATUSES = {"new", "assessing", "accepted", "rejected", "briefed", "published"}
+VALID_STATUSES = {"new", "included", "excluded", "accepted", "briefed", "published"}
 
 
 def get_sources(source_type: str | None = None, enabled_only: bool = True) -> list[dict]:

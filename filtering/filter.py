@@ -8,8 +8,8 @@ Checks (in order):
   2. Minimum summary length          — < 8 words → reject
   3. Language detection              — non-English → reject
 
-Pass  → status = assessing
-Fail  → status = rejected  +  status_reason
+Pass  → status = included
+Fail  → status = excluded  +  status_reason
 """
 
 import logging
@@ -56,18 +56,18 @@ def _chunked(lst: list, size: int):
 def _apply_results(passing: list[str], rejections: dict[str, list[str]]) -> None:
     """
     Batch-write results back to Supabase in chunks to stay within URL length limits.
-      passing    — list of guids → status = assessing
-      rejections — {reason: [guid, ...]} → status = rejected
+      passing    — list of guids → status = included
+      rejections — {reason: [guid, ...]} → status = excluded
     """
     client = get_client()
 
     for chunk in _chunked(passing, _BATCH_SIZE):
-        client.table(TABLE).update({"status": "assessing"}).in_("guid", chunk).execute()
+        client.table(TABLE).update({"status": "included"}).in_("guid", chunk).execute()
 
     for reason, guids in rejections.items():
         for chunk in _chunked(guids, _BATCH_SIZE):
             client.table(TABLE).update(
-                {"status": "rejected", "status_reason": reason}
+                {"status": "excluded", "status_reason": reason}
             ).in_("guid", chunk).execute()
 
 
@@ -130,8 +130,8 @@ def run_filtering(run_date: str | None = None) -> None:
     Stage 2 filtering. Run after ingestion, before clustering.
 
     Transitions:
-      new → assessing  (all checks pass)
-      new → rejected   (any check fails, reason recorded in status_reason)
+      new → included  (all checks pass)
+      new → excluded  (any check fails, reason recorded in status_reason)
     """
     from datetime import date, timedelta
     target_date = run_date or (date.today() - timedelta(days=1)).isoformat()
@@ -178,7 +178,7 @@ def run_filtering(run_date: str | None = None) -> None:
 
     total_rejected = sum(len(v) for v in rejections.values())
     logger.info(
-        "Filtering complete -- %d passed (-> assessing), %d rejected",
+        "Filtering complete -- %d included, %d excluded",
         len(passing),
         total_rejected,
     )

@@ -6,7 +6,7 @@ so the cluster → hybrid → score → brief stages can be re-run cleanly.
 
 What it does:
   - Deletes all story_clusters rows for the date
-  - Resets news_articles.status → 'assessing' and clears cluster_id
+  - Resets news_articles.status → 'included' and clears cluster_id
     for articles fetched on that date that are past the filtering stage
 """
 
@@ -36,15 +36,15 @@ def reset_date(date: str) -> None:
     deleted_clusters = len(resp.data) if resp.data else 0
     logger.info("Deleted %d cluster rows for %s", deleted_clusters, date)
 
-    # Reset articles fetched on that date back to 'assessing'
+    # Reset articles fetched on that date back to 'included'
     resp = supabase.table(TABLE).update({
-        "status": "assessing",
+        "status": "included",
         "cluster_id": None,
     }).gte("fetched_at", f"{date}T00:00:00.000Z").lte(
         "fetched_at", f"{date}T23:59:59.999Z"
-    ).in_("status", ["accepted", "rejected", "briefed", "published"]).execute()
+    ).in_("status", ["accepted", "briefed", "published"]).execute()
     reset_articles = len(resp.data) if resp.data else 0
-    logger.info("Reset %d articles to 'assessing' for %s", reset_articles, date)
+    logger.info("Reset %d articles to 'included' for %s", reset_articles, date)
 
 
 if __name__ == "__main__":
