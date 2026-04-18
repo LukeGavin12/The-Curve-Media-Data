@@ -16,6 +16,7 @@ from filtering.filter import run_filtering
 from clustering.cluster import run_clustering
 from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
 from scoring.score import run_scoring
+from tagging.tag import run_tagging
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ def run_daily_pipeline() -> None:
     run_clustering(run_date=yesterday)
     run_hybrid_clustering(run_date=yesterday)
     run_scoring(run_date=yesterday)
+    run_tagging(run_date=yesterday)
     logger.info("=== Daily pipeline complete ===")
 
 

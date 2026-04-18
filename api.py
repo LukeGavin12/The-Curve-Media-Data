@@ -16,6 +16,7 @@ from filtering.filter import run_filtering
 from clustering.cluster import run_clustering
 from scoring.score import run_scoring
 from briefing.brief import run_briefing
+from tagging.tag import run_tagging
 
 API_KEY = os.environ.get("PIPELINE_API_KEY", "")
 
@@ -74,8 +75,12 @@ def run_cluster(background_tasks: BackgroundTasks, date: str | None = None, x_ap
 
 @app.post("/run/score")
 def run_score(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
+    """Score clusters then tag them in sequence."""
     _check_key(x_api_key)
-    background_tasks.add_task(run_scoring, run_date=date)
+    def _score_and_tag(run_date: str | None) -> None:
+        run_scoring(run_date=run_date)
+        run_tagging(run_date=run_date)
+    background_tasks.add_task(_score_and_tag, date)
     return {"status": "started"}
 
 
