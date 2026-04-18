@@ -15,6 +15,7 @@ from ingestion.scheduler import run_ingestion, start_scheduler
 from filtering.filter import run_filtering
 from clustering.cluster import run_clustering
 from scoring.score import run_scoring
+from briefing.brief import run_briefing
 
 API_KEY = os.environ.get("PIPELINE_API_KEY", "")
 
@@ -64,4 +65,11 @@ def run_cluster(background_tasks: BackgroundTasks, date: str | None = None, x_ap
 def run_score(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
     _check_key(x_api_key)
     background_tasks.add_task(run_scoring, run_date=date)
+    return {"status": "started"}
+
+
+@app.post("/run/brief")
+def run_brief(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
+    _check_key(x_api_key)
+    background_tasks.add_task(run_briefing, run_date=date)
     return {"status": "started"}

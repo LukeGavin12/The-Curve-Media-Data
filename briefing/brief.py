@@ -33,12 +33,13 @@ BRIEFING_MODEL = "claude-sonnet-4-6"
 # DB helpers
 # ---------------------------------------------------------------------------
 
-def _fetch_accepted_clusters() -> list[dict[str, Any]]:
+def _fetch_accepted_clusters(run_date: str) -> list[dict[str, Any]]:
     client = get_client()
     response = (
         client.table(CLUSTERS_TABLE)
         .select("id, cluster_id, anchor_article_id")
         .eq("cluster_status", "accepted")
+        .eq("date", run_date)
         .execute()
     )
     return response.data or []
@@ -125,7 +126,7 @@ def _generate_brief(anchor: dict[str, Any], supporting: list[dict[str, Any]], to
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def run_briefing() -> None:
+def run_briefing(run_date: str | None = None) -> None:
     """
     Stage 5 brief generation. Run after scoring.
 
@@ -135,13 +136,15 @@ def run_briefing() -> None:
       3. Write brief to story_clusters
       4. Set cluster_status = briefed, briefed_at = now
     """
-    logger.info("Brief generation started")
+    from datetime import date, timedelta
+    target_date = run_date or (date.today() - timedelta(days=1)).isoformat()
+    logger.info("Brief generation started for %s", target_date)
 
     _settings = get_pipeline_settings()
     _CURVE_TOV = _settings.get("tov_doc", "")
     _BRIEF_INSTRUCTIONS = _settings.get("brief_instructions", "")
 
-    clusters = _fetch_accepted_clusters()
+    clusters = _fetch_accepted_clusters(target_date)
     if not clusters:
         logger.info("Briefing: no accepted clusters to process")
         return
