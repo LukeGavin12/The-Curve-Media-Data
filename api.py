@@ -54,6 +54,17 @@ def run_filter(background_tasks: BackgroundTasks, date: str | None = None, x_api
     return {"status": "started"}
 
 
+@app.post("/run/scan")
+def run_scan(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
+    """Ingest then filter in sequence — ensures filter only runs after ingest completes."""
+    _check_key(x_api_key)
+    def _scan(run_date: str | None) -> None:
+        run_ingestion()
+        run_filtering(run_date=run_date)
+    background_tasks.add_task(_scan, date)
+    return {"status": "started"}
+
+
 @app.post("/run/cluster")
 def run_cluster(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
     _check_key(x_api_key)
