@@ -136,8 +136,10 @@ def _call_claude_batch(clusters: list[dict[str, Any]], articles_by_cluster: dict
                 cluster_id = clusters[idx]["cluster_id"]
                 score = min(max(float(item["score"]), 0.0), 1.0)
                 reason = str(item["reason"])
-                tags = [t for t in (item.get("tags") or []) if t in available_tags]
-                geo_tags = [t for t in (item.get("geo_tags") or []) if t in available_geo_tags]
+                tag_lookup = {t.lower(): t for t in available_tags}
+                geo_lookup = {t.lower(): t for t in available_geo_tags}
+                tags = [tag_lookup[t.lower()] for t in (item.get("tags") or []) if t.lower() in tag_lookup]
+                geo_tags = [geo_lookup[t.lower()] for t in (item.get("geo_tags") or []) if t.lower() in geo_lookup]
                 results[cluster_id] = (score, reason, tags, geo_tags)
 
         # Any cluster missing from Claude's response gets a fallback
