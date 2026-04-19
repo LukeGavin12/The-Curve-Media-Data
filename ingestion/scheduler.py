@@ -40,16 +40,16 @@ def run_daily_pipeline() -> None:
       5. Score yesterday's pending clusters
       Briefing is manual — trigger from the admin UI.
     """
-    from datetime import date, timedelta
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    from datetime import date
+    today = date.today().isoformat()
 
-    logger.info("=== Daily pipeline started (processing %s) ===", yesterday)
+    logger.info("=== Daily pipeline started (processing %s) ===", today)
     run_ingestion()
-    run_filtering(run_date=yesterday)
-    run_clustering(run_date=yesterday)
-    run_hybrid_clustering(run_date=yesterday)
-    run_scoring(run_date=yesterday)
-    run_tagging(run_date=yesterday)
+    run_filtering(run_date=today)
+    run_clustering(run_date=today)
+    run_hybrid_clustering(run_date=today)
+    run_scoring(run_date=today)
+    run_tagging(run_date=today)
     logger.info("=== Daily pipeline complete ===")
 
 
