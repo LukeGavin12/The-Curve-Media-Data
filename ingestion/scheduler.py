@@ -17,6 +17,7 @@ from clustering.cluster import run_clustering
 from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
 from scoring.score import run_scoring
 from tagging.tag import run_tagging
+from briefing.brief import run_briefing
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,20 @@ def run_daily_pipeline() -> None:
     from datetime import date
     today = date.today().isoformat()
 
+    def _run(name: str, fn, *args, **kwargs) -> None:
+        try:
+            fn(*args, **kwargs)
+        except Exception as exc:
+            logger.error("Pipeline stage '%s' failed: %s", name, exc, exc_info=True)
+
     logger.info("=== Daily pipeline started (processing %s) ===", today)
-    run_ingestion()
-    run_filtering(run_date=today)
-    run_clustering(run_date=today)
-    run_hybrid_clustering(run_date=today)
-    run_scoring(run_date=today)
-    run_tagging(run_date=today)
+    _run("ingest",   run_ingestion)
+    _run("filter",   run_filtering,         run_date=today)
+    _run("cluster",  run_clustering,        run_date=today)
+    _run("hybrid",   run_hybrid_clustering, run_date=today)
+    _run("score",    run_scoring,           run_date=today)
+    _run("tag",      run_tagging,           run_date=today)
+    _run("brief",    run_briefing,          run_date=today)
     logger.info("=== Daily pipeline complete ===")
 
 
