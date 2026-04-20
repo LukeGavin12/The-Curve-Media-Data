@@ -85,6 +85,13 @@ def run_score(background_tasks: BackgroundTasks, date: str | None = None, x_api_
     return {"status": "started"}
 
 
+@app.post("/run/tag")
+def run_tag(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
+    _check_key(x_api_key)
+    background_tasks.add_task(run_tagging, run_date=date)
+    return {"status": "started"}
+
+
 @app.post("/run/brief")
 def run_brief(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
     _check_key(x_api_key)
