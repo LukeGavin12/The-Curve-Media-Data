@@ -26,7 +26,7 @@ def _fetch_accepted_clusters(run_date: str, score_threshold: float) -> list[dict
     client = get_client()
     response = (
         client.table(CLUSTERS_TABLE)
-        .select("id, cluster_id")
+        .select("id, cluster_id, name")
         .eq("date", run_date)
         .eq("cluster_status", "accepted")
         .gte("relevance_score", score_threshold)
@@ -55,18 +55,19 @@ def _fetch_articles_for_clusters(cluster_ids: list[str]) -> dict[str, list[dict[
 def _build_prompt(clusters: list[dict], articles_by_cluster: dict,
                   available_tags: list[str], available_geo_tags: list[str]) -> str:
     parts = [
-        "For each story cluster below, assign the most relevant topic tags and geographic tags.",
-        "Return a JSON array with one object per cluster in the same order.",
-        'Each object must have: "index" (int), "tags" (array of 0-3 topic tags), "geo_tags" (array of geographic tags).',
-        "Only use tags from the provided lists. Use empty arrays if none apply.",
+        "For each story cluster below, assign the most relevant topic and geographic tags.",
+        "Return a JSON array — one object per cluster, in the same order, numbered from 1.",
+        'Each object: {"index": <int starting at 1>, "tags": [<0-3 topic tags>], "geo_tags": [<geographic tags>]}',
+        'Example: [{"index": 1, "tags": ["savings", "pensions"], "geo_tags": ["UK"]}, {"index": 2, "tags": [], "geo_tags": []}]',
+        "Only use tags from the lists below. Use empty arrays if none apply.",
+        "Return only the JSON array. No preamble, explanation, or markdown fences.",
         f"Available topic tags: {', '.join(available_tags)}",
         f"Available geographic tags: {', '.join(available_geo_tags)}",
-        "Return only the JSON array. No preamble or markdown fences.",
         "",
     ]
     for i, cluster in enumerate(clusters, 1):
         articles = articles_by_cluster.get(cluster["cluster_id"], [])
-        parts.append(f"--- Cluster {i} ---")
+        parts.append(f"--- Cluster {i}: {cluster.get('name', '')} ---")
         for article in articles:
             parts.append(f"{article.get('title', '')}: {article.get('summary', '')}")
         parts.append("")
@@ -105,9 +106,9 @@ def _call_claude(clusters: list[dict], articles_by_cluster: dict,
         return results
 
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
-        logger.warning("Could not parse tagging response: %s", exc)
+        logger.error("Could not parse tagging response (%.300s…): %s", raw if 'raw' in dir() else '?', exc)
     except Exception as exc:
-        logger.warning("Tagging API error: %s", exc)
+        logger.error("Tagging API error: %s", exc)
 
     return {}
 
