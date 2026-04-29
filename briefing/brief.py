@@ -49,7 +49,7 @@ def _fetch_cluster_articles(cluster_id: str) -> list[dict[str, Any]]:
     client = get_client()
     response = (
         client.table(TABLE)
-        .select("id, guid, title, summary, source_name")
+        .select("id, guid, title, summary, source_name, deep_summary")
         .eq("cluster_id", cluster_id)
         .execute()
     )
@@ -154,6 +154,10 @@ def run_briefing(run_date: str | None = None) -> None:
         if not articles:
             logger.warning("Cluster %s has no articles — skipping", cluster_id)
             continue
+
+        # Prefer deep_summary (from research stage) over RSS summary where available
+        for article in articles:
+            article["summary"] = article.get("deep_summary") or article["summary"]
 
         result = _generate_brief(articles, _CURVE_TOV, _BRIEF_INSTRUCTIONS)
 

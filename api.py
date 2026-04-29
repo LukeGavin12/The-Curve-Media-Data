@@ -18,6 +18,7 @@ from scoring.score import run_scoring
 from briefing.brief import run_briefing
 from tagging.tag import run_tagging
 from daily_brief.daily_brief import run_daily_brief
+from research.research import run_research
 
 API_KEY = os.environ.get("PIPELINE_API_KEY", "")
 
@@ -96,6 +97,13 @@ def run_tag(background_tasks: BackgroundTasks, date: str | None = None, x_api_ke
 def run_brief(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
     _check_key(x_api_key)
     background_tasks.add_task(run_briefing, run_date=date)
+    return {"status": "started"}
+
+
+@app.post("/run/research")
+def run_research_endpoint(background_tasks: BackgroundTasks, date: str | None = None, x_api_key: str = Header(default="")):
+    _check_key(x_api_key)
+    background_tasks.add_task(run_research, run_date=date)
     return {"status": "started"}
 
 
