@@ -1,10 +1,9 @@
 """
-Stage 3 — Claude Clustering.
+Clustering — two Claude calls, one DB write.
 
-Groups filtered articles editorially using Claude. Multi-article clusters
-get a Claude-generated name; single articles keep their original title.
-
-Replaces the previous Voyage AI vector clustering + hybrid Claude pass.
+Call 1 (week continuity): assign today's articles to ongoing stories from earlier this week.
+Call 2 (new stories): group remaining articles into new named clusters.
+Unplaced articles become singletons.
 """
 
 import json
@@ -29,18 +28,14 @@ Group articles that are reporting on the same underlying story or feeding into t
 Rules:
 - Group articles covering the same story or closely related developments
 - Cluster along broad themes where multiple articles clearly feed the same narrative
-- Do NOT force groupings — if an article genuinely stands alone, leave it as a single
+- Do NOT force groupings — if an article genuinely stands alone, leave it out
 - Do NOT group articles just because they are in the same industry
 - A cluster needs at least 2 articles
+- Name each cluster with a short punchy headline (3–7 words, no filler)
 
-Return a JSON array of clusters only (do not include singles). For each cluster:
-- name: short punchy headline for the group (3–7 words, no filler)
-- article_ids: array of article id values
-- tags: array of 0–3 relevant topic tags from the provided list (empty array if none fit)
-- geo_tags: array of relevant geographic tags from the provided list (empty array if none fit)
-
-Any articles not in a cluster will be kept as singles automatically.
-Return a JSON array only — empty array if nothing should be grouped."""
+Return a JSON array of clusters only — empty array if nothing should be grouped.
+Articles not included will be kept as individual stories.
+Return a JSON array only: [{"name": "...", "article_ids": [...]}]"""
 
 
 def _get_monday(d: str) -> str:
@@ -76,7 +71,7 @@ def _fetch_included_articles(run_date: str) -> list[dict]:
     client = get_client()
     resp = (
         client.table(TABLE)
-        .select("id, guid, title, summary, published_at")
+        .select("id, title, summary")
         .eq("status", "included")
         .gte("fetched_at", f"{run_date}T00:00:00.000Z")
         .lte("fetched_at", f"{run_date}T23:59:59.999Z")
@@ -85,120 +80,185 @@ def _fetch_included_articles(run_date: str) -> list[dict]:
     return resp.data or []
 
 
-def _build_system_prompt(base_prompt: str, week_names: list[str], available_tags: list[str], available_geo_tags: list[str]) -> str:
-    prompt = base_prompt
-    if week_names:
-        names_block = "\n".join(f"  - {n}" for n in week_names)
-        prompt += f"\n\nStory names already used this week — if a cluster is clearly the same ongoing story, reuse the exact name:\n{names_block}"
-    if available_tags:
-        prompt += f"\n\nAvailable topic tags: {', '.join(available_tags)}"
-    if available_geo_tags:
-        prompt += f"\nAvailable geographic tags: {', '.join(available_geo_tags)}"
-    return prompt
-
-
-def _call_claude(articles: list[dict], system_prompt: str) -> list[dict]:
-    """Send articles to Claude, get back list of {name, article_ids}."""
-    lines = []
-    for a in articles:
-        lines.append(f'id: {a["id"]} | {a["title"]}')
-
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": "\n".join(lines)}],
+def _call_week_continuity(articles: list[dict], week_names: list[str]) -> dict[str, list[str]]:
+    """
+    Call 1: assign articles to ongoing week stories.
+    Returns {week_name: [article_ids]}.
+    Only returns matches — articles not mentioned are not continuing any week story.
+    """
+    article_lines = "\n".join(
+        f'id: {a["id"]} | {a["title"]} — {(a.get("summary") or "").strip()}'
+        for a in articles
     )
-    raw = msg.content[0].text.strip()
-    # Strip any preamble prose before the JSON array
-    start = raw.find("[")
-    if start == -1:
-        logger.warning("Claude returned no JSON array for clustering — treating as no clusters")
-        return []
-    raw = raw[start:].removesuffix("```").strip()
+    names_block = "\n".join(f"  - {n}" for n in week_names)
+
+    prompt = "\n".join([
+        "You are an editorial assistant for Curve Media.",
+        "These stories have been running earlier this week:",
+        "",
+        names_block,
+        "",
+        "Today's articles:",
+        "",
+        article_lines,
+        "",
+        "For each article that clearly continues one of this week's ongoing stories, assign it.",
+        "Only assign if the article is genuinely reporting on the same ongoing narrative — not just the same broad topic.",
+        "Articles not mentioned will be treated as new stories.",
+        "",
+        'Return JSON only — an array: [{"name": "<exact story name from the list above>", "article_ids": [...]}]',
+        "Return an empty array if nothing clearly continues a weekly story.",
+    ])
+
+    ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.error("Claude returned non-JSON for clustering (%.200s…): %s", raw, exc)
+        msg = ai.messages.create(
+            model=MODEL,
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        start = raw.find("[")
+        if start == -1:
+            return {}
+        data = json.loads(raw[start:])
+        week_name_set = set(week_names)
+        result: dict[str, list[str]] = {}
+        for item in data:
+            name = (item.get("name") or "").strip()
+            ids = item.get("article_ids") or []
+            if name in week_name_set and ids:
+                result[name] = ids
+        return result
+    except Exception as exc:
+        logger.warning("Week continuity call failed: %s", exc)
+        return {}
+
+
+def _call_new_clustering(articles: list[dict], system_prompt: str) -> list[dict]:
+    """
+    Call 2: group remaining articles into new named clusters.
+    Returns [{name, article_ids}] — only multi-article groups.
+    Articles not mentioned become singletons.
+    """
+    article_lines = "\n".join(
+        f'id: {a["id"]} | {a["title"]} — {(a.get("summary") or "").strip()}'
+        for a in articles
+    )
+
+    ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        msg = ai.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{"role": "user", "content": article_lines}],
+        )
+        raw = msg.content[0].text.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        start = raw.find("[")
+        if start == -1:
+            return []
+        return json.loads(raw[start:])
+    except Exception as exc:
+        logger.warning("New clustering call failed: %s", exc)
         return []
 
 
 def run_clustering(run_date: str | None = None) -> None:
     target_date = run_date or (date.today() - timedelta(days=1)).isoformat()
-    logger.info("Claude clustering started for %s", target_date)
+    logger.info("Clustering started for %s", target_date)
 
     settings = get_pipeline_settings()
-    base_prompt = (settings.get("custom_cluster_prompt") or "").strip() or DEFAULT_CLUSTER_PROMPT
-    available_tags = settings.get("available_tags") or []
-    available_geo_tags = settings.get("available_geo_tags") or []
-
-    week_names = _fetch_week_names(target_date)
-    logger.info("Found %d existing story names from earlier this week", len(week_names))
-    system_prompt = _build_system_prompt(base_prompt, week_names, available_tags, available_geo_tags)
+    cluster_prompt = (settings.get("custom_cluster_prompt") or "").strip() or DEFAULT_CLUSTER_PROMPT
 
     articles = _fetch_included_articles(target_date)
     if not articles:
         logger.info("Clustering: no included articles to process")
         return
 
-    logger.info("Clustering %d articles with Claude", len(articles))
+    logger.info("Clustering %d articles", len(articles))
     articles_by_id = {a["id"]: a for a in articles}
-    supabase = get_client()
     assigned_ids: set[str] = set()
-    multi_count = 0
 
-    try:
-        clusters = _call_claude(articles, system_prompt)
-    except Exception as exc:
-        logger.error("Claude clustering failed: %s", exc)
-        return
+    # (name, article_ids, is_week_continuation)
+    final_clusters: list[tuple[str, list[str], bool]] = []
 
-    for group in clusters:
-        name = (group.get("name") or "").strip()
-        article_ids = [aid for aid in (group.get("article_ids") or []) if aid in articles_by_id]
+    # ── Call 1: week continuity ──────────────────────────────────────────────
+    week_names = _fetch_week_names(target_date)
+    if week_names:
+        logger.info("Checking %d articles against %d week stories", len(articles), len(week_names))
+        week_assignments = _call_week_continuity(articles, week_names)
+        for name, ids in week_assignments.items():
+            valid_ids = [i for i in ids if i in articles_by_id]
+            if valid_ids:
+                final_clusters.append((name, valid_ids, True))
+                assigned_ids.update(valid_ids)
+        logger.info(
+            "Week continuity: %d articles → %d ongoing stories",
+            sum(len(ids) for ids in week_assignments.values()),
+            len(week_assignments),
+        )
+    else:
+        logger.info("No earlier stories this week — skipping week continuity pass")
 
-        if not name or len(article_ids) < 2:
-            continue
+    # ── Call 2: new clustering ───────────────────────────────────────────────
+    remaining = [a for a in articles if a["id"] not in assigned_ids]
+    if remaining:
+        logger.info("New clustering: grouping %d remaining articles", len(remaining))
+        new_groups = _call_new_clustering(remaining, cluster_prompt)
+        for group in new_groups:
+            name = (group.get("name") or "").strip()
+            ids = [
+                i for i in (group.get("article_ids") or [])
+                if i in articles_by_id and i not in assigned_ids
+            ]
+            if name and len(ids) >= 2:
+                final_clusters.append((name, ids, False))
+                assigned_ids.update(ids)
 
+    singletons = [a for a in articles if a["id"] not in assigned_ids]
+
+    # ── DB write ─────────────────────────────────────────────────────────────
+    supabase = get_client()
+
+    for name, ids, is_continuation in final_clusters:
         cluster_id = str(uuid.uuid4())
-        cluster_articles = [articles_by_id[aid] for aid in article_ids]
-        anchor = min(cluster_articles, key=lambda a: a.get("published_at") or "9999-12-31")
-
-        tags = [t for t in (group.get("tags") or []) if t in available_tags]
-        geo_tags = [t for t in (group.get("geo_tags") or []) if t in available_geo_tags]
+        weekly_story = name.strip().lower() if is_continuation else None
 
         supabase.table(CLUSTERS_TABLE).insert({
-            "cluster_id":        cluster_id,
-            "date":              target_date,
-            "name":              name,
-            "anchor_article_id": anchor["id"],
-            "article_count":     len(article_ids),
-            "cluster_status":    "pending",
-            "tags":              tags,
-            "geo_tags":          geo_tags,
+            "cluster_id":     cluster_id,
+            "date":           target_date,
+            "name":           name,
+            "weekly_story":   weekly_story,
+            "article_count":  len(ids),
+            "cluster_status": "pending",
         }).execute()
+        supabase.table(TABLE).update({"cluster_id": cluster_id}).in_("id", ids).execute()
 
-        supabase.table(TABLE).update({"cluster_id": cluster_id}).in_("id", article_ids).execute()
+        if weekly_story:
+            supabase.table(CLUSTERS_TABLE)\
+                .update({"weekly_story": weekly_story})\
+                .eq("name", name)\
+                .is_("weekly_story", "null")\
+                .execute()
 
-        assigned_ids.update(article_ids)
-        multi_count += 1
-
-    # Singles — keep original title
-    singles = [a for a in articles if a["id"] not in assigned_ids]
-    for a in singles:
+    for a in singletons:
         cluster_id = str(uuid.uuid4())
         supabase.table(CLUSTERS_TABLE).insert({
-            "cluster_id":        cluster_id,
-            "date":              target_date,
-            "name":              a.get("title", ""),
-            "anchor_article_id": a["id"],
-            "article_count":     1,
-            "cluster_status":    "pending",
+            "cluster_id":     cluster_id,
+            "date":           target_date,
+            "name":           a.get("title", ""),
+            "article_count":  1,
+            "cluster_status": "pending",
         }).execute()
         supabase.table(TABLE).update({"cluster_id": cluster_id}).eq("id", a["id"]).execute()
 
     logger.info(
-        "Clustering complete — %d articles → %d multi-article clusters, %d singles",
-        len(articles), multi_count, len(singles),
+        "Clustering complete — %d articles → %d clusters (%d multi, %d singletons)",
+        len(articles),
+        len(final_clusters) + len(singletons),
+        len(final_clusters),
+        len(singletons),
     )

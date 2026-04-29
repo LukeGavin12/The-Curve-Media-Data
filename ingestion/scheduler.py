@@ -2,7 +2,7 @@
 Scheduler — runs the full daily pipeline at 5am UTC.
 
 Single job:
-  05:00 UTC daily → ingest → filter → cluster → hybrid → score → brief
+  05:00 UTC daily → ingest → filter → cluster → score → tag → brief
 """
 
 import logging
@@ -14,7 +14,6 @@ from ingestion.fetcher import fetch_all_sources
 from ingestion.storage import upsert_articles
 from filtering.filter import run_filtering
 from clustering.cluster import run_clustering
-from hybrid_clustering.hybrid_cluster import run_hybrid_clustering
 from scoring.score import run_scoring
 from tagging.tag import run_tagging
 from briefing.brief import run_briefing
@@ -33,13 +32,13 @@ def run_ingestion() -> None:
 
 def run_daily_pipeline() -> None:
     """
-    Full daily pipeline (always processes yesterday's articles):
-      1. Ingest from all sources (stored with today's fetched_at)
-      2. Filter yesterday's new articles
-      3. Cluster yesterday's assessing articles (Voyage AI)
-      4. Hybrid pass — name clusters, assign singletons, form roundups (Claude)
-      5. Score yesterday's pending clusters
-      Briefing is manual — trigger from the admin UI.
+    Full daily pipeline:
+      1. Ingest from all sources
+      2. Filter new articles
+      3. Cluster — week continuity pass then new story grouping
+      4. Score pending clusters
+      5. Tag accepted clusters
+      6. Generate briefs for accepted clusters
     """
     from datetime import date
     today = date.today().isoformat()
@@ -51,13 +50,12 @@ def run_daily_pipeline() -> None:
             logger.error("Pipeline stage '%s' failed: %s", name, exc, exc_info=True)
 
     logger.info("=== Daily pipeline started (processing %s) ===", today)
-    _run("ingest",   run_ingestion)
-    _run("filter",   run_filtering,         run_date=today)
-    _run("cluster",  run_clustering,        run_date=today)
-    _run("hybrid",   run_hybrid_clustering, run_date=today)
-    _run("score",    run_scoring,           run_date=today)
-    _run("tag",      run_tagging,           run_date=today)
-    _run("brief",    run_briefing,          run_date=today)
+    _run("ingest",  run_ingestion)
+    _run("filter",  run_filtering,  run_date=today)
+    _run("cluster", run_clustering, run_date=today)
+    _run("score",   run_scoring,    run_date=today)
+    _run("tag",     run_tagging,    run_date=today)
+    _run("brief",   run_briefing,   run_date=today)
     logger.info("=== Daily pipeline complete ===")
 
 

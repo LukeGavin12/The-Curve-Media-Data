@@ -37,7 +37,7 @@ def _fetch_accepted_clusters(run_date: str) -> list[dict[str, Any]]:
     client = get_client()
     response = (
         client.table(CLUSTERS_TABLE)
-        .select("id, cluster_id, anchor_article_id")
+        .select("id, cluster_id")
         .eq("cluster_status", "accepted")
         .eq("date", run_date)
         .execute()
@@ -60,7 +60,7 @@ def _fetch_cluster_articles(cluster_id: str) -> list[dict[str, Any]]:
 # Brief generation
 # ---------------------------------------------------------------------------
 
-def _build_prompt(anchor: dict[str, Any], supporting: list[dict[str, Any]], brief_instructions: str = "") -> str:
+def _build_prompt(articles: list[dict[str, Any]], brief_instructions: str = "") -> str:
     lines = [
         "Generate a short editorial name and brief for the following story.",
         "",
@@ -74,25 +74,17 @@ def _build_prompt(anchor: dict[str, Any], supporting: list[dict[str, Any]], brie
         lines.append(brief_instructions)
         lines.append("")
 
-    lines += [
-        f"ANCHOR ARTICLE ({anchor.get('source_name', 'Unknown')}):",
-        f"Title: {anchor.get('title', '')}",
-        f"Summary: {anchor.get('summary', '')}",
-    ]
-
-    if supporting:
-        lines.append("")
-        lines.append("SUPPORTING ARTICLES:")
-        for article in supporting:
-            source = article.get("source_name", "Unknown")
-            title = article.get("title", "")
-            summary = article.get("summary", "")
-            lines.append(f"- [{source}] {title}: {summary}")
+    lines.append("ARTICLES:")
+    for article in articles:
+        source = article.get("source_name", "Unknown")
+        title = article.get("title", "")
+        summary = article.get("summary", "")
+        lines.append(f"- [{source}] {title}: {summary}")
 
     return "\n".join(lines)
 
 
-def _generate_brief(anchor: dict[str, Any], supporting: list[dict[str, Any]], tov_doc: str, brief_instructions: str = "") -> tuple[str, str] | None:
+def _generate_brief(articles: list[dict[str, Any]], tov_doc: str, brief_instructions: str = "") -> tuple[str, str] | None:
     """
     Call Claude to generate a name and brief.
     Returns (name, brief) or None on failure.
@@ -100,7 +92,7 @@ def _generate_brief(anchor: dict[str, Any], supporting: list[dict[str, Any]], to
     import json
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    prompt = _build_prompt(anchor, supporting, brief_instructions)
+    prompt = _build_prompt(articles, brief_instructions)
 
     try:
         message = client.messages.create(
@@ -131,9 +123,9 @@ def run_briefing(run_date: str | None = None) -> None:
     Stage 5 brief generation. Run after scoring.
 
     For each accepted cluster:
-      1. Fetch anchor article + supporting articles
-      2. Generate brief via Claude (CurveTOV.md as system prompt)
-      3. Write brief to story_clusters
+      1. Fetch all cluster articles
+      2. Generate brief via Claude (tov_doc as system prompt)
+      3. Write name + brief to story_clusters
       4. Set cluster_status = briefed, briefed_at = now
     """
     from datetime import date, timedelta
@@ -157,21 +149,13 @@ def run_briefing(run_date: str | None = None) -> None:
 
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
-        anchor_article_id = cluster.get("anchor_article_id")
 
         articles = _fetch_cluster_articles(cluster_id)
         if not articles:
             logger.warning("Cluster %s has no articles — skipping", cluster_id)
             continue
 
-        # Split into anchor + supporting
-        anchor = next(
-            (a for a in articles if a["id"] == anchor_article_id),
-            articles[0],  # fall back to first article if anchor not found
-        )
-        supporting = [a for a in articles if a["id"] != anchor["id"]]
-
-        result = _generate_brief(anchor, supporting, _CURVE_TOV, _BRIEF_INSTRUCTIONS)
+        result = _generate_brief(articles, _CURVE_TOV, _BRIEF_INSTRUCTIONS)
 
         if result is None:
             failed += 1
