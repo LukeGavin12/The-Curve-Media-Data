@@ -94,7 +94,7 @@ def get_pipeline_settings() -> dict:
     client = get_client()
     response = (
         client.table("pipeline_settings")
-        .select("tov_doc, audience_doc, similarity_threshold, score_threshold, max_articles_per_source, custom_cluster_prompt")
+        .select("tov_doc, audience_doc, similarity_threshold, score_threshold, max_articles_per_source, custom_cluster_prompt, daily_brief_prompt")
         .eq("id", 1)
         .single()
         .execute()

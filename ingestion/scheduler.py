@@ -17,6 +17,7 @@ from clustering.cluster import run_clustering
 from scoring.score import run_scoring
 from tagging.tag import run_tagging
 from briefing.brief import run_briefing
+from daily_brief.daily_brief import run_daily_brief
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ def run_daily_pipeline() -> None:
       4. Score pending clusters
       5. Tag accepted clusters
       6. Generate briefs for accepted clusters
+      7. Synthesise daily brief from all story briefs
     """
     from datetime import date
     today = date.today().isoformat()
@@ -50,12 +52,13 @@ def run_daily_pipeline() -> None:
             logger.error("Pipeline stage '%s' failed: %s", name, exc, exc_info=True)
 
     logger.info("=== Daily pipeline started (processing %s) ===", today)
-    _run("ingest",  run_ingestion)
-    _run("filter",  run_filtering,  run_date=today)
-    _run("cluster", run_clustering, run_date=today)
-    _run("score",   run_scoring,    run_date=today)
-    _run("tag",     run_tagging,    run_date=today)
-    _run("brief",   run_briefing,   run_date=today)
+    _run("ingest",       run_ingestion)
+    _run("filter",       run_filtering,    run_date=today)
+    _run("cluster",      run_clustering,   run_date=today)
+    _run("score",        run_scoring,      run_date=today)
+    _run("tag",          run_tagging,      run_date=today)
+    _run("brief",        run_briefing,     run_date=today)
+    _run("daily-brief",  run_daily_brief,  run_date=today)
     logger.info("=== Daily pipeline complete ===")
 
 
