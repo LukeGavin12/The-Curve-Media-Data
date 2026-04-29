@@ -32,10 +32,11 @@ Rules:
 - Do NOT group articles just because they are in the same industry
 - A cluster needs at least 2 articles
 - Name each cluster with a short punchy headline (3–7 words, no filler)
+- Description: one sentence (~10 words) summarising what the story is about
 
 Return a JSON array of clusters only — empty array if nothing should be grouped.
 Articles not included will be kept as individual stories.
-Return a JSON array only: [{"name": "...", "article_ids": [...]}]"""
+Return a JSON array only: [{"name": "...", "description": "...", "article_ids": [...]}]"""
 
 
 def _get_monday(d: str) -> str:
@@ -106,7 +107,7 @@ def _call_week_continuity(articles: list[dict], week_names: list[str]) -> dict[s
         "Only assign if the article is genuinely reporting on the same ongoing narrative — not just the same broad topic.",
         "Articles not mentioned will be treated as new stories.",
         "",
-        'Return JSON only — an array: [{"name": "<exact story name from the list above>", "article_ids": [...]}]',
+        'Return JSON only — an array: [{"name": "<exact story name from the list above>", "description": "<10 words summarising the story>", "article_ids": [...]}]',
         "Return an empty array if nothing clearly continues a weekly story.",
     ])
 
@@ -124,12 +125,13 @@ def _call_week_continuity(articles: list[dict], week_names: list[str]) -> dict[s
             return {}
         data = json.loads(raw[start:])
         week_name_set = set(week_names)
-        result: dict[str, list[str]] = {}
+        result: dict[str, tuple[list[str], str]] = {}
         for item in data:
             name = (item.get("name") or "").strip()
+            description = (item.get("description") or "").strip()
             ids = item.get("article_ids") or []
             if name in week_name_set and ids:
-                result[name] = ids
+                result[name] = (ids, description)
         return result
     except Exception as exc:
         logger.warning("Week continuity call failed: %s", exc)
@@ -139,7 +141,7 @@ def _call_week_continuity(articles: list[dict], week_names: list[str]) -> dict[s
 def _call_new_clustering(articles: list[dict], system_prompt: str) -> list[dict]:
     """
     Call 2: group remaining articles into new named clusters.
-    Returns [{name, article_ids}] — only multi-article groups.
+    Returns [{name, description, article_ids}] — only multi-article groups.
     Articles not mentioned become singletons.
     """
     article_lines = "\n".join(
@@ -182,22 +184,22 @@ def run_clustering(run_date: str | None = None) -> None:
     articles_by_id = {a["id"]: a for a in articles}
     assigned_ids: set[str] = set()
 
-    # (name, article_ids, is_week_continuation)
-    final_clusters: list[tuple[str, list[str], bool]] = []
+    # (name, article_ids, description, is_week_continuation)
+    final_clusters: list[tuple[str, list[str], str, bool]] = []
 
     # ── Call 1: week continuity ──────────────────────────────────────────────
     week_names = _fetch_week_names(target_date)
     if week_names:
         logger.info("Checking %d articles against %d week stories", len(articles), len(week_names))
         week_assignments = _call_week_continuity(articles, week_names)
-        for name, ids in week_assignments.items():
+        for name, (ids, description) in week_assignments.items():
             valid_ids = [i for i in ids if i in articles_by_id]
             if valid_ids:
-                final_clusters.append((name, valid_ids, True))
+                final_clusters.append((name, valid_ids, description, True))
                 assigned_ids.update(valid_ids)
         logger.info(
             "Week continuity: %d articles → %d ongoing stories",
-            sum(len(ids) for ids in week_assignments.values()),
+            sum(len(ids) for ids, _ in week_assignments.values()),
             len(week_assignments),
         )
     else:
@@ -210,12 +212,13 @@ def run_clustering(run_date: str | None = None) -> None:
         new_groups = _call_new_clustering(remaining, cluster_prompt)
         for group in new_groups:
             name = (group.get("name") or "").strip()
+            description = (group.get("description") or "").strip()
             ids = [
                 i for i in (group.get("article_ids") or [])
                 if i in articles_by_id and i not in assigned_ids
             ]
             if name and len(ids) >= 2:
-                final_clusters.append((name, ids, False))
+                final_clusters.append((name, ids, description, False))
                 assigned_ids.update(ids)
 
     singletons = [a for a in articles if a["id"] not in assigned_ids]
@@ -223,7 +226,7 @@ def run_clustering(run_date: str | None = None) -> None:
     # ── DB write ─────────────────────────────────────────────────────────────
     supabase = get_client()
 
-    for name, ids, is_continuation in final_clusters:
+    for name, ids, description, is_continuation in final_clusters:
         cluster_id = str(uuid.uuid4())
         weekly_story = name.strip().lower() if is_continuation else None
 
@@ -231,6 +234,7 @@ def run_clustering(run_date: str | None = None) -> None:
             "cluster_id":     cluster_id,
             "date":           target_date,
             "name":           name,
+            "description":    description or None,
             "weekly_story":   weekly_story,
             "article_count":  len(ids),
             "cluster_status": "pending",
