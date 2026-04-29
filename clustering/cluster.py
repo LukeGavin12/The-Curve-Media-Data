@@ -254,6 +254,7 @@ def run_clustering(run_date: str | None = None) -> None:
             "cluster_id":     cluster_id,
             "date":           target_date,
             "name":           a.get("title", ""),
+            "description":    a.get("summary") or None,
             "article_count":  1,
             "cluster_status": "pending",
         }).execute()
